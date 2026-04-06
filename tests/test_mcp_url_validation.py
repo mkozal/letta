@@ -12,6 +12,39 @@ from letta.services.mcp_manager import MCPManager
 from letta.services.mcp_server_manager import MCPServerManager
 
 
+def test_validate_mcp_server_url_allows_private_host_when_in_allowlist():
+    with patch("letta.helpers.url_validation.tool_settings") as mock_settings:
+        mock_settings.mcp_allowed_private_hosts = ["host.docker.internal"]
+        with patch(
+            "letta.helpers.url_validation.socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("192.168.65.254", 8000))],
+        ):
+            result = validate_mcp_server_url("http://host.docker.internal:8000/mcp/")
+            assert result == "http://host.docker.internal:8000/mcp/"
+
+
+def test_validate_mcp_server_url_still_blocks_unlisted_private_host():
+    with patch("letta.helpers.url_validation.tool_settings") as mock_settings:
+        mock_settings.mcp_allowed_private_hosts = ["host.docker.internal"]
+        with patch(
+            "letta.helpers.url_validation.socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("192.168.1.100", 8000))],
+        ):
+            with pytest.raises(ValueError, match="Hostname resolves to non-public IP"):
+                validate_mcp_server_url("http://evil.internal:8000/mcp/")
+
+
+def test_validate_mcp_server_url_allowlist_bypasses_blocked_hostname():
+    with patch("letta.helpers.url_validation.tool_settings") as mock_settings:
+        mock_settings.mcp_allowed_private_hosts = ["localhost"]
+        with patch(
+            "letta.helpers.url_validation.socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("127.0.0.1", 8000))],
+        ):
+            result = validate_mcp_server_url("http://localhost:8000/mcp/")
+            assert result == "http://localhost:8000/mcp/"
+
+
 def test_validate_mcp_server_url_rejects_private_ip_literal():
     with pytest.raises(ValueError, match="Non-public IP not allowed"):
         validate_mcp_server_url("http://127.0.0.1:8000")

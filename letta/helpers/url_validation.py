@@ -2,6 +2,8 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
+from letta.settings import tool_settings
+
 _BLOCKED_HOSTNAMES = {
     "localhost",
     "localhost.",
@@ -22,8 +24,15 @@ def _normalize_hostname(hostname: str) -> str:
     return hostname.rstrip(".").lower()
 
 
+def _is_allowed_private_host(hostname: str) -> bool:
+    normalized = _normalize_hostname(hostname)
+    return normalized in {_normalize_hostname(h) for h in tool_settings.mcp_allowed_private_hosts}
+
+
 def _is_blocked_hostname(hostname: str) -> bool:
     normalized = _normalize_hostname(hostname)
+    if _is_allowed_private_host(normalized):
+        return False
     blocked_hostnames = {_normalize_hostname(value) for value in _BLOCKED_HOSTNAMES}
     return normalized in blocked_hostnames or any(normalized.endswith(suffix) for suffix in _BLOCKED_SUFFIXES)
 
@@ -73,7 +82,7 @@ def validate_mcp_server_url(url: str, *, resolve_hostname: bool = True) -> str:
         if ip_text in seen_ips:
             continue
         seen_ips.add(ip_text)
-        if not ipaddress.ip_address(ip_text).is_global:
+        if not ipaddress.ip_address(ip_text).is_global and not _is_allowed_private_host(hostname):
             raise ValueError(f"Hostname resolves to non-public IP: {ip_text}")
 
     if not seen_ips:

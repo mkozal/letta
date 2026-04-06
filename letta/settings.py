@@ -42,6 +42,15 @@ class ToolSettings(BaseSettings):
     mcp_list_tools_timeout: float = 30.0
     mcp_execute_tool_timeout: float = 60.0
     mcp_read_from_config: bool = False  # if False, will throw if attempting to read/write from file
+    mcp_allowed_private_hosts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Hostnames allowed to resolve to private/non-public IPs for MCP connections. "
+            "Use this to permit Docker internal hostnames (e.g., host.docker.internal) "
+            "or other trusted internal services. Set via LETTA_MCP_ALLOWED_PRIVATE_HOSTS "
+            "as a JSON list or comma-separated string."
+        ),
+    )
     mcp_disable_stdio: bool = Field(
         default=True,
         description=(
