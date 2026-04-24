@@ -278,11 +278,15 @@ class StreamingService:
             # The worker will receive this, start a turn via REST API (with X-Letta-Source: letta-code),
             # and the server will then process THAT request locally (avoiding the loop).
             await self.server.connection_manager.send_json(agent.environment_id, {
-                "type": "run_turn",
-                "agent_id": agent_id,
-                "request_token": request_token,
-                "messages": [msg.model_dump() for msg in request.messages],
-                "stream": True # remote environments always use streaming internally
+                "type": "input",
+                "runtime": {
+                    "agent_id": agent_id,
+                    "conversation_id": conversation_id or "default"
+                },
+                "payload": {
+                    "kind": "create_message",
+                    "messages": [msg.model_dump() for msg in request.messages]
+                }
             })
             
             # Wait for the worker to start the run and for the run_id to appear in Redis

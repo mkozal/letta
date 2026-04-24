@@ -28,9 +28,6 @@ class Environment(SqlalchemyBase, OrganizationMixin, UserMixin):
     
     # Store DeviceMetadata as JSON
     metadata_: Mapped[dict] = mapped_column(JSON, nullable=False)
-    
-    # Store tools as JSON
-    tools: Mapped[list] = mapped_column(JSON, nullable=True, default=[])
 
     def to_pydantic(self) -> PydanticEnvironment:
         return PydanticEnvironment(
@@ -41,6 +38,5 @@ class Environment(SqlalchemyBase, OrganizationMixin, UserMixin):
             user_id=self.user_id,
             first_seen_at=self.first_seen_at,
             last_seen_at=self.last_seen_at,
-            metadata=self.metadata_,
-            tools=self.tools or []
+            metadata=self.metadata_
         )

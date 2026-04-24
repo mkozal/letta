@@ -33,8 +33,7 @@ class EnvironmentManager:
                 user_id=actor.id,
                 first_seen_at=int(time.time() * 1000),
                 last_seen_at=int(time.time() * 1000),
-                metadata_=registration.metadata.model_dump(),
-                tools=registration.tools or []
+                metadata_=registration.metadata.model_dump()
             )
             
             await new_env.create_async(session)
