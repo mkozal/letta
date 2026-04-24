@@ -792,6 +792,7 @@ class AgentManager:
 
             # If agent provider changed, refresh default-derived compaction model
             # so compaction stays aligned with the agent's active provider
+            llm_provider_changed = False
             if not explicit_compaction_model_update and agent_update.llm_config is not None:
                 old_provider_name = agent.llm_config.provider_name or agent.llm_config.model_endpoint_type
                 new_provider_name = agent_update.llm_config.provider_name or agent_update.llm_config.model_endpoint_type
@@ -803,37 +804,39 @@ class AgentManager:
             if agent_update.environment_id is not None:
                 agent.environment_id = agent_update.environment_id
 
+            if llm_provider_changed:
+                # catch old agent handle if on create, provider had no default --> resorted to agent's handle/model
+                old_default_model = get_default_summarizer_model(old_provider_name) or (
+                    agent.llm_config.handle or agent.llm_config.model
+                )
+                new_default_model = get_default_summarizer_model(new_provider_name) or agent_update.llm_config.handle
 
-                    # catch old agent handle if on create, provider had no default --> resorted to agent's handle/model
-                    old_default_model = get_default_summarizer_model(old_provider_name) or (
-                        agent.llm_config.handle or agent.llm_config.model
-                    )
-                    new_default_model = get_default_summarizer_model(new_provider_name) or agent_update.llm_config.handle
+                existing_compaction_model = (
+                    agent_update.compaction_settings.model
+                    if (agent_update.compaction_settings is not None and "model" in agent_update.compaction_settings.model_fields_set)
+                    else (agent.compaction_settings.model if agent.compaction_settings is not None else None)
+                )
 
-                    existing_compaction_model = (
-                        agent_update.compaction_settings.model
-                        if (agent_update.compaction_settings is not None and "model" in agent_update.compaction_settings.model_fields_set)
-                        else (agent.compaction_settings.model if agent.compaction_settings is not None else None)
-                    )
+                should_refresh_compaction_model = existing_compaction_model is None or (
+                    old_default_model is not None and existing_compaction_model == old_default_model
+                )
 
-                    should_refresh_compaction_model = existing_compaction_model is None or (
-                        old_default_model is not None and existing_compaction_model == old_default_model
-                    )
 
-                    if should_refresh_compaction_model:
-                        if agent_update.compaction_settings is None:
-                            # Fill in agent compaction settings if needed (old agents)
-                            if agent.compaction_settings is None:
-                                agent_update.compaction_settings = CompactionSettings(model=new_default_model)
-                            else:
-                                # Override model settings w/ new default model (bc of provider change)
-                                agent_update.compaction_settings = agent.compaction_settings.model_copy(
-                                    update={"model": new_default_model, "model_settings": None}
-                                )
-                        else:  # partial update of compaction settings
-                            agent_update.compaction_settings.model = new_default_model
-                            if "model_settings" not in agent_update.compaction_settings.model_fields_set:
-                                agent_update.compaction_settings.model_settings = None
+                if should_refresh_compaction_model:
+                    if agent_update.compaction_settings is None:
+                        # Fill in agent compaction settings if needed (old agents)
+                        if agent.compaction_settings is None:
+                            agent_update.compaction_settings = CompactionSettings(model=new_default_model)
+                        else:
+                            # Override model settings w/ new default model (bc of provider change)
+                            agent_update.compaction_settings = agent.compaction_settings.model_copy(
+                                update={"model": new_default_model, "model_settings": None}
+                            )
+                    else:  # partial update of compaction settings
+                        agent_update.compaction_settings.model = new_default_model
+                        if "model_settings" not in agent_update.compaction_settings.model_fields_set:
+                            agent_update.compaction_settings.model_settings = None
+
 
             # Upsert compaction_settings: merge incoming partial update with existing settings
             if agent_update.compaction_settings is not None:

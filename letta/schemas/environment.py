@@ -4,8 +4,8 @@ from letta.schemas.letta_base import LettaBase
 
 class DeviceMetadata(LettaBase):
     os: Optional[str] = Field(None, description="Operating system of the device")
-    nodeVersion: Optional[str] = Field(None, description="Node.js version")
-    lettaCodeVersion: Optional[str] = Field(None, description="Letta Code version")
+    node_version: Optional[str] = Field(None, description="Node.js version")
+    letta_code_version: Optional[str] = Field(None, description="Letta Code version")
 
 class Device(LettaBase):
     id: str = Field(..., description="Unique identifier for the device (UUID)")
