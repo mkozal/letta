@@ -9,46 +9,6 @@ from letta.log import get_logger
 router = APIRouter(prefix="/environments", tags=["environments"])
 logger = get_logger(__name__)
 
-class ConnectionManager:
-    def __init__(self):
-        # connection_id -> WebSocket
-        self.active_connections: dict[str, WebSocket] = {}
-        # request_id -> asyncio.Future
-        self.pending_requests: dict[str, asyncio.Future] = {}
-
-    async def connect(self, connection_id: str, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections[connection_id] = websocket
-        logger.info(f"WebSocket connected: {connection_id}")
-
-    def disconnect(self, connection_id: str):
-        if connection_id in self.active_connections:
-            del self.active_connections[connection_id]
-            logger.info(f"WebSocket disconnected: {connection_id}")
-
-    async def send_json(self, connection_id: str, message: dict):
-        if connection_id in self.active_connections:
-            await self.active_connections[connection_id].send_json(message)
-        else:
-            logger.warning(f"Attempted to send message to inactive connection: {connection_id}")
-
-    async def wait_for_response(self, request_id: str, timeout: float = 30.0) -> dict:
-        future = asyncio.get_event_loop().create_future()
-        self.pending_requests[request_id] = future
-        try:
-            return await asyncio.wait_for(future, timeout=timeout)
-        finally:
-            if request_id in self.pending_requests:
-                del self.pending_requests[request_id]
-
-    def resolve_response(self, request_id: str, response: dict):
-        if request_id in self.pending_requests:
-            self.pending_requests[request_id].set_result(response)
-
-
-# Global connection manager instance
-manager = ConnectionManager()
-
 @router.get("/", response_model=EnvironmentList, operation_id="list_environments")
 async def list_environments(
     server: SyncServer = Depends(get_letta_server),
@@ -77,7 +37,7 @@ async def websocket_endpoint(
 ):
     """WebSocket endpoint for remote environments to listen for instructions."""
     # TODO: Proper auth for WebSocket
-    await manager.connect(connection_id, websocket)
+    await server.connection_manager.connect(connection_id, websocket)
     try:
         while True:
             # We mostly expect heartbeats or tool results from the client
@@ -91,13 +51,13 @@ async def websocket_endpoint(
                 if message.get("type") == "tool_return":
                     request_id = message.get("id")
                     if request_id:
-                        manager.resolve_response(request_id, message)
+                        server.connection_manager.resolve_response(request_id, message)
                 
                 logger.debug(f"Received WebSocket message from {connection_id}: {message}")
             except json.JSONDecodeError:
                 logger.error(f"Received invalid JSON from {connection_id}")
     except WebSocketDisconnect:
-        manager.disconnect(connection_id)
+        server.connection_manager.disconnect(connection_id)
     except Exception as e:
         logger.error(f"WebSocket error for {connection_id}: {e}")
-        manager.disconnect(connection_id)
+        server.connection_manager.disconnect(connection_id)

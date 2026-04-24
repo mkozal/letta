@@ -69,7 +69,8 @@ from letta.schemas.message import Message, Message as PydanticMessage, MessageCr
 from letta.schemas.passage import Passage as PydanticPassage
 from letta.schemas.secret import Secret
 from letta.schemas.source import Source as PydanticSource
-from letta.schemas.tool import Tool as PydanticTool
+from letta.schemas.tool import Tool as PydanticTool, ToolType
+from letta.orm.environment import Environment as EnvironmentModel
 from letta.schemas.tool_rule import ContinueToolRule, RequiresApprovalToolRule, TerminalToolRule
 from letta.schemas.user import User as PydanticUser
 from letta.server.db import db_registry
@@ -1248,7 +1249,38 @@ class AgentManager:
                 agent_encrypted = await agent.to_pydantic_async(include_relationships=include_relationships, include=include, decrypt=False)
 
             # Decrypt secrets outside session
-            return (await decrypt_agent_secrets([agent_encrypted]))[0]
+            agent_state = (await decrypt_agent_secrets([agent_encrypted]))[0]
+
+            # Inject remote tools if environment is assigned
+            if agent_state.environment_id:
+                try:
+                    async with db_registry.async_session() as session:
+                        stmt = select(EnvironmentModel).where(EnvironmentModel.id == agent_state.environment_id)
+                        result = await session.execute(stmt)
+                        env = result.scalar_one_or_none()
+                        if env and env.tools:
+                            remote_tools = []
+                            for t_dict in env.tools:
+                                # Map remote tool JSON to PydanticTool
+                                # Remote tools are treated as CUSTOM but executed via RemoteToolExecutor
+                                remote_tool = PydanticTool(
+                                    name=t_dict.get("name"),
+                                    description=t_dict.get("description"),
+                                    json_schema=t_dict.get("schema"),
+                                    tool_type=ToolType.CUSTOM,
+                                    tags=(t_dict.get("tags") or []) + ["remote-injected"]
+                                )
+                                remote_tools.append(remote_tool)
+                            
+                            # Merge with existing tools (avoid duplicates by name)
+                            existing_names = {t.name for t in agent_state.tools}
+                            for rt in remote_tools:
+                                if rt.name not in existing_names:
+                                    agent_state.tools.append(rt)
+                except Exception as env_err:
+                    logger.warning(f"Failed to inject remote tools for agent {agent_id}: {env_err}")
+
+            return agent_state
         except NoResultFound:
             # Re-raise NoResultFound without logging to preserve 404 handling
             raise

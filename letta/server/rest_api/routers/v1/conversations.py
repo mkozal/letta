@@ -269,6 +269,7 @@ async def _send_agent_direct_message(
     actor,
     billing_context: "BillingContext | None" = None,
     openai_responses_websocket: bool = False,
+    source: Optional[str] = None,
 ) -> StreamingResponse | LettaResponse:
     """
     Handle agent-direct messaging with locking but without conversation features.
@@ -306,6 +307,7 @@ async def _send_agent_direct_message(
             should_lock=True,
             billing_context=billing_context,
             openai_responses_websocket=openai_responses_websocket,
+            source=source,
         )
         return result
 
@@ -445,6 +447,7 @@ async def send_conversation_message(
             actor=actor,
             billing_context=headers.billing_context,
             openai_responses_websocket=bool(headers.experimental_params and headers.experimental_params.openai_responses_websocket),
+            source=headers.letta_source,
         )
 
     # Normal conversation mode
@@ -488,6 +491,7 @@ async def send_conversation_message(
             conversation_id=conversation_id,
             billing_context=headers.billing_context,
             openai_responses_websocket=bool(headers.experimental_params and headers.experimental_params.openai_responses_websocket),
+            source=headers.letta_source,
         )
         return result
 

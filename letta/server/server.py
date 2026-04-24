@@ -104,6 +104,7 @@ from letta.services.telemetry_manager import TelemetryManager
 from letta.services.tool_executor.tool_execution_manager import ToolExecutionManager
 from letta.services.tool_manager import ToolManager
 from letta.services.user_manager import UserManager
+from letta.server.rest_api.connection_manager import ConnectionManager
 from letta.settings import DatabaseChoice, model_settings, settings, tool_settings
 from letta.streaming_interface import AgentChunkStreamingInterface
 from letta.utils import get_friendly_error_msg, get_persona_text
@@ -176,6 +177,7 @@ class SyncServer(object):
         self.telemetry_manager = TelemetryManager()
         self.file_agent_manager = FileAgentManager()
         self.file_manager = FileManager()
+        self.connection_manager = ConnectionManager()
 
         # Import and initialize the agent generate completion manager
         from letta.services.agent_generate_completion_manager import AgentGenerateCompletionManager

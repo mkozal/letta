@@ -203,6 +203,7 @@ class StreamingService:
         should_lock: bool = False,
         billing_context: "BillingContext | None" = None,
         openai_responses_websocket: bool = False,
+        source: Optional[str] = None,
     ) -> tuple[Optional[PydanticRun], Union[StreamingResponse, LettaResponse]]:
         """
         Create a streaming response for an agent.
@@ -262,6 +263,55 @@ class StreamingService:
             )
             # Create a copy of agent state with the overridden llm_config
             agent = agent.model_copy(update={"llm_config": override_llm_config})
+
+        # --- Remote Forwarding Logic ---
+        # If the agent is assigned to a remote environment and this request didn't originate from a worker (letta-code),
+        # we forward the input to the remote worker instead of running the loop locally.
+        if agent.environment_id and source != "letta-code":
+            logger.info(f"Forwarding input for agent {agent_id} to remote environment {agent.environment_id}")
+            
+            # Derive request token for synchronization
+            message_otids = [msg.otid for msg in request.messages if msg.otid]
+            request_token = derive_request_token(message_otids)
+            
+            # Send 'run_turn' command to the worker
+            # The worker will receive this, start a turn via REST API (with X-Letta-Source: letta-code),
+            # and the server will then process THAT request locally (avoiding the loop).
+            await self.server.connection_manager.send_json(agent.environment_id, {
+                "type": "run_turn",
+                "agent_id": agent_id,
+                "request_token": request_token,
+                "messages": [msg.model_dump() for msg in request.messages],
+                "stream": True # remote environments always use streaming internally
+            })
+            
+            # Wait for the worker to start the run and for the run_id to appear in Redis
+            # We poll briefly to find the run_id associated with this request_token
+            # This 'handoff' ensures the ADE gets the same stream the worker is producing.
+            start_wait = time.time()
+            remote_run_id = None
+            while time.time() - start_wait < 10.0: # 10s timeout
+                remote_run_id = await redis_client.get_run_id_by_otid(request_token)
+                if remote_run_id:
+                    break
+                await asyncio.sleep(0.2)
+            
+            if not remote_run_id:
+                logger.error(f"Timed out waiting for remote worker to start run for token {request_token}")
+                raise LettaError(f"Remote environment {agent.environment_id} failed to respond in time.")
+
+            logger.info(f"Handoff successful: attaching to remote run {remote_run_id}")
+            
+            # Return a stream that pulls from the Redis stream created by the worker
+            stream = redis_sse_stream_generator(
+                redis_client=redis_client,
+                run_id=remote_run_id,
+            )
+            if request.include_pings and settings.enable_keepalive:
+                stream = add_keepalive_to_stream(stream, keepalive_interval=settings.keepalive_interval, run_id=remote_run_id)
+            
+            return None, StreamingResponseWithStatusCode(stream, media_type="text/event-stream")
+        # --- End Remote Forwarding Logic ---
 
         model_compatible_token_streaming = self._is_token_streaming_compatible(agent)
         route_class = "background" if request.background else "foreground"

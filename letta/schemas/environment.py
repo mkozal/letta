@@ -21,6 +21,7 @@ class Environment(LettaBase):
     first_seen_at: int = Field(..., description="Timestamp of first appearance", alias="firstSeenAt")
     last_seen_at: int = Field(..., description="Timestamp of last activity", alias="lastSeenAt")
     metadata: DeviceMetadata = Field(..., description="Device metadata")
+    tools: List[Dict] = Field(default_factory=list, description="List of tools available in this environment")
 
 class EnvironmentList(LettaBase):
     connections: List[Environment]
@@ -30,7 +31,9 @@ class EnvironmentCreate(LettaBase):
     device_id: str = Field(..., description="Device ID", alias="deviceId")
     connection_name: str = Field(..., description="Human-readable name for the environment", alias="connectionName")
     metadata: DeviceMetadata = Field(..., description="Device metadata")
+    tools: Optional[List[Dict]] = Field(None, description="List of tools available in this environment")
 
 class EnvironmentUpdate(LettaBase):
     connection_name: Optional[str] = None
     metadata: Optional[DeviceMetadata] = None
+    tools: Optional[List[Dict]] = None
