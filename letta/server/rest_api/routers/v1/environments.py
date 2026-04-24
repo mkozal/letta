@@ -1,0 +1,102 @@
+import json
+from typing import List, Optional
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from letta.server.rest_api.dependencies import HeaderParams, get_headers, get_letta_server
+from letta.server.server import SyncServer
+from letta.schemas.environment import Environment, EnvironmentCreate, DeviceMetadata
+from letta.log import get_logger
+
+router = APIRouter(prefix="/environments", tags=["environments"])
+logger = get_logger(__name__)
+
+class ConnectionManager:
+    def __init__(self):
+        # connection_id -> WebSocket
+        self.active_connections: dict[str, WebSocket] = {}
+        # request_id -> asyncio.Future
+        self.pending_requests: dict[str, asyncio.Future] = {}
+
+    async def connect(self, connection_id: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections[connection_id] = websocket
+        logger.info(f"WebSocket connected: {connection_id}")
+
+    def disconnect(self, connection_id: str):
+        if connection_id in self.active_connections:
+            del self.active_connections[connection_id]
+            logger.info(f"WebSocket disconnected: {connection_id}")
+
+    async def send_json(self, connection_id: str, message: dict):
+        if connection_id in self.active_connections:
+            await self.active_connections[connection_id].send_json(message)
+        else:
+            logger.warning(f"Attempted to send message to inactive connection: {connection_id}")
+
+    async def wait_for_response(self, request_id: str, timeout: float = 30.0) -> dict:
+        future = asyncio.get_event_loop().create_future()
+        self.pending_requests[request_id] = future
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        finally:
+            if request_id in self.pending_requests:
+                del self.pending_requests[request_id]
+
+    def resolve_response(self, request_id: str, response: dict):
+        if request_id in self.pending_requests:
+            self.pending_requests[request_id].set_result(response)
+
+
+# Global connection manager instance
+manager = ConnectionManager()
+
+@router.get("/", response_model=List[Environment], operation_id="list_environments")
+async def list_environments(
+    server: SyncServer = Depends(get_letta_server),
+    headers: HeaderParams = Depends(get_headers),
+):
+    """List all registered remote environments."""
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=headers.actor_id)
+    return await server.environment_manager.list_environments_async(actor=actor)
+
+@router.post("/register", response_model=Environment, operation_id="register_environment")
+async def register_environment(
+    registration: EnvironmentCreate,
+    server: SyncServer = Depends(get_letta_server),
+    headers: HeaderParams = Depends(get_headers),
+):
+    """Register a new remote environment and return its connection ID."""
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=headers.actor_id)
+    return await server.environment_manager.register_environment_async(registration=registration, actor=actor)
+
+@router.websocket("/ws/{connection_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    connection_id: str,
+    server: SyncServer = Depends(get_letta_server),
+):
+    """WebSocket endpoint for remote environments to listen for instructions."""
+    # TODO: Proper auth for WebSocket
+    await manager.connect(connection_id, websocket)
+    try:
+        while True:
+            # We mostly expect heartbeats or tool results from the client
+            data = await websocket.receive_text()
+            try:
+                message = json.loads(data)
+                # Update last seen activity
+                await server.environment_manager.update_environment_activity_async(connection_id)
+                
+                # Handle incoming message kinds if any
+                if message.get("type") == "tool_return":
+                    request_id = message.get("id")
+                    if request_id:
+                        manager.resolve_response(request_id, message)
+                
+                logger.debug(f"Received WebSocket message from {connection_id}: {message}")
+            except json.JSONDecodeError:
+                logger.error(f"Received invalid JSON from {connection_id}")
+    except WebSocketDisconnect:
+        manager.disconnect(connection_id)
+    except Exception as e:
+        logger.error(f"WebSocket error for {connection_id}: {e}")
+        manager.disconnect(connection_id)

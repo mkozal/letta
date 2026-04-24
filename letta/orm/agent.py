@@ -123,6 +123,8 @@ class Agent(SqlalchemyBase, OrganizationMixin, ProjectMixin, TemplateEntityMixin
     # indexing controls
     hidden: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=None, doc="If set to True, the agent will be hidden.")
     _vector_db_namespace: Mapped[Optional[str]] = mapped_column(String, nullable=True, doc="Private field for vector database namespace")
+    environment_id: Mapped[Optional[str]] = mapped_column(String, sa.ForeignKey("environments.id"), nullable=True, doc="The id of the remote environment this agent is associated with.")
+
 
     # relationships
     organization: Mapped["Organization"] = relationship("Organization", back_populates="agents", lazy="raise")

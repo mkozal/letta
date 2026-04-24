@@ -100,15 +100,27 @@ class ToolExecutionManager:
         """
         status = "error"  # set as default for tracking purposes
         try:
-            executor = ToolExecutorFactory.get_executor(
-                tool.tool_type,
-                message_manager=self.message_manager,
-                agent_manager=self.agent_manager,
-                block_manager=self.block_manager,
-                run_manager=self.run_manager,
-                passage_manager=self.passage_manager,
-                actor=self.actor,
-            )
+            if self.agent_state and self.agent_state.environment_id:
+                from letta.services.tool_executor.remote_tool_executor import RemoteToolExecutor
+                executor = RemoteToolExecutor(
+                    message_manager=self.message_manager,
+                    agent_manager=self.agent_manager,
+                    block_manager=self.block_manager,
+                    run_manager=self.run_manager,
+                    passage_manager=self.passage_manager,
+                    actor=self.actor,
+                )
+            else:
+                executor = ToolExecutorFactory.get_executor(
+                    tool.tool_type,
+                    message_manager=self.message_manager,
+                    agent_manager=self.agent_manager,
+                    block_manager=self.block_manager,
+                    run_manager=self.run_manager,
+                    passage_manager=self.passage_manager,
+                    actor=self.actor,
+                )
+
 
             def _metrics_callback(exec_time_ms: int, exc):
                 return MetricRegistry().tool_execution_time_ms_histogram.record(

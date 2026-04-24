@@ -77,6 +77,7 @@ from letta.services.agent_serialization_manager import AgentSerializationManager
 from letta.services.archive_manager import ArchiveManager
 from letta.services.block_manager import BlockManager
 from letta.services.block_manager_git import GIT_MEMORY_ENABLED_TAG, GitEnabledBlockManager
+from letta.services.environment_manager import EnvironmentManager
 from letta.services.file_manager import FileManager
 from letta.services.files_agents_manager import FileAgentManager
 from letta.services.group_manager import GroupManager
@@ -163,6 +164,7 @@ class SyncServer(object):
         self.sandbox_config_manager = SandboxConfigManager()
         self.message_manager = MessageManager()
         self.job_manager = JobManager()
+        self.environment_manager = EnvironmentManager()
         self.run_manager = RunManager()
         self.agent_manager = AgentManager(block_manager=self.block_manager)
         self.archive_manager = ArchiveManager()

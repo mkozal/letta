@@ -538,6 +538,7 @@ class AgentManager:
                     timezone=agent_create.timezone if agent_create.timezone else DEFAULT_TIMEZONE,
                     max_files_open=agent_create.max_files_open,
                     per_file_view_window_char_limit=agent_create.per_file_view_window_char_limit,
+                    environment_id=agent_create.environment_id,
                 )
 
                 # Set template fields for InternalTemplateAgentCreate (similar to group creation)
@@ -798,6 +799,10 @@ class AgentManager:
 
                 if llm_provider_changed:
                     from letta.services.summarizer.summarizer_config import CompactionSettings, get_default_summarizer_model
+            
+            if agent_update.environment_id is not None:
+                agent.environment_id = agent_update.environment_id
+
 
                     # catch old agent handle if on create, provider had no default --> resorted to agent's handle/model
                     old_default_model = get_default_summarizer_model(old_provider_name) or (

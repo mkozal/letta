@@ -106,6 +106,7 @@ class AgentState(OrmMetadataBase, validate_assignment=True):
     # Field in this object can be theoretically edited by tools, and will be persisted by the ORM
     description: Optional[str] = Field(None, description="The description of the agent.")
     metadata: Optional[Dict] = Field(None, description="The metadata of the agent.")
+    environment_id: Optional[str] = Field(None, description="The id of the remote environment this agent is associated with.")
 
     memory: Memory = Field(..., description="Deprecated: Use `blocks` field instead. The in-context memory of the agent.", deprecated=True)
     blocks: List[Block] = Field(..., description="The memory blocks used by the agent.")
@@ -241,6 +242,7 @@ class CreateAgent(BaseModel, validate_assignment=True):  #
     )
     description: Optional[str] = Field(None, description="The description of the agent.")
     metadata: Optional[Dict] = Field(None, description="The metadata of the agent.")
+    environment_id: Optional[str] = Field(None, description="The id of the remote environment this agent is associated with.")
 
     # model configuration
     llm_config: Optional[LLMConfig] = Field(
@@ -455,6 +457,7 @@ class UpdateAgent(BaseModel):
     message_ids: Optional[List[MessageId]] = Field(None, description="The ids of the messages in the agent's in-context memory.")
     description: Optional[str] = Field(None, description="The description of the agent.")
     metadata: Optional[Dict] = Field(None, description="The metadata of the agent.")
+    environment_id: Optional[str] = Field(None, description="The id of the remote environment this agent is associated with.")
     tool_exec_environment_variables: Optional[Dict[str, str]] = Field(None, description="Deprecated: use `secrets` field instead")
     secrets: Optional[Dict[str, str]] = Field(None, description="The environment variables for tool execution specific to this agent.")
     project_id: Optional[str] = Field(None, description="The id of the project the agent belongs to.")
