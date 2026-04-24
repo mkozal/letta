@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from letta.server.rest_api.dependencies import HeaderParams, get_headers, get_letta_server
 from letta.server.server import SyncServer
-from letta.schemas.environment import Environment, EnvironmentCreate, DeviceMetadata
+from letta.schemas.environment import Environment, EnvironmentCreate, DeviceMetadata, EnvironmentList
 from letta.log import get_logger
 
 router = APIRouter(prefix="/environments", tags=["environments"])
@@ -49,14 +49,15 @@ class ConnectionManager:
 # Global connection manager instance
 manager = ConnectionManager()
 
-@router.get("/", response_model=List[Environment], operation_id="list_environments")
+@router.get("/", response_model=EnvironmentList, operation_id="list_environments")
 async def list_environments(
     server: SyncServer = Depends(get_letta_server),
     headers: HeaderParams = Depends(get_headers),
 ):
     """List all registered remote environments."""
     actor = await server.user_manager.get_actor_or_default_async(actor_id=headers.actor_id)
-    return await server.environment_manager.list_environments_async(actor=actor)
+    envs = await server.environment_manager.list_environments_async(actor=actor)
+    return EnvironmentList(connections=envs, hasNextPage=False)
 
 @router.post("/register", response_model=Environment, operation_id="register_environment")
 async def register_environment(
