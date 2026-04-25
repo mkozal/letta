@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from pydantic import Field
+from pydantic import ConfigDict, Field
 from letta.schemas.letta_base import LettaBase
 
 class DeviceMetadata(LettaBase):
@@ -13,6 +13,8 @@ class Device(LettaBase):
     user_id: str = Field(..., description="User ID who registered the device", alias="userId")
 
 class Environment(LettaBase):
+    model_config = ConfigDict(serialize_by_alias=True)
+
     id: str = Field(..., description="Connection ID", alias="connectionId")
     device_id: str = Field(..., description="Device ID", alias="deviceId")
     connection_name: str = Field(..., description="Human-readable name for the environment", alias="connectionName")
