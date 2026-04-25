@@ -792,7 +792,7 @@ def create_application() -> "FastAPI":
             },
         )
 
-    settings.cors_origins.append("https://app.letta.com")
+
 
     if (os.getenv("LETTA_SERVER_SECURE") == "true") or "--secure" in sys.argv:
         print(f"▶ Using secure mode with password: {random_password}")
@@ -808,9 +808,13 @@ def create_application() -> "FastAPI":
     # This is a pure ASGI middleware to properly propagate contextvars to streaming responses
     app.add_middleware(RequestIdMiddleware)
 
+    if "https://app.letta.com" not in settings.cors_origins:
+        settings.cors_origins.append("https://app.letta.com")
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=r"https://.*\.letta\.com",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

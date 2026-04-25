@@ -20,6 +20,9 @@ class CheckPasswordMiddleware(BaseHTTPMiddleware):
         }:
             return await call_next(request)
 
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         if (
             request.headers.get("X-BARE-PASSWORD") == f"password {self.password}"
             or request.headers.get("Authorization") == f"Bearer {self.password}"

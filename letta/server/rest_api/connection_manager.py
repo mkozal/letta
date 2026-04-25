@@ -10,17 +10,23 @@ class ConnectionManager:
     def __init__(self):
         # connection_id -> WebSocket
         self.active_connections: Dict[str, WebSocket] = {}
+        # connection_id -> timestamp (ms)
+        self.connection_times: Dict[str, int] = {}
         # request_id -> asyncio.Future
         self.pending_requests: Dict[str, asyncio.Future] = {}
 
     async def connect(self, connection_id: str, websocket: WebSocket):
+        import time
         await websocket.accept()
         self.active_connections[connection_id] = websocket
+        self.connection_times[connection_id] = int(time.time() * 1000)
         logger.info(f"WebSocket connected: {connection_id}")
 
     def disconnect(self, connection_id: str):
         if connection_id in self.active_connections:
             del self.active_connections[connection_id]
+            if connection_id in self.connection_times:
+                del self.connection_times[connection_id]
             logger.info(f"WebSocket disconnected: {connection_id}")
 
     async def send_json(self, connection_id: str, message: dict):

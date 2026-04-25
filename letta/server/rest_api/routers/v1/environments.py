@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Request
 from letta.server.rest_api.dependencies import HeaderParams, get_headers, get_letta_server
 from letta.server.server import SyncServer
 from letta.schemas.environment import Environment, EnvironmentCreate, DeviceMetadata, EnvironmentList
@@ -17,17 +17,32 @@ async def list_environments(
     """List all registered remote environments."""
     actor = await server.user_manager.get_actor_or_default_async(actor_id=headers.actor_id)
     envs = await server.environment_manager.list_environments_async(actor=actor)
+    # Populate status based on active WebSocket connections
+    for env in envs:
+        if env.id in server.connection_manager.active_connections:
+            env.connected_at = server.connection_manager.connection_times.get(env.id)
+            env.last_heartbeat = env.last_seen_at
+        else:
+            env.connected_at = None
+            env.last_heartbeat = None
     return EnvironmentList(connections=envs, hasNextPage=False)
 
 @router.post("/register", response_model=Environment, operation_id="register_environment")
 async def register_environment(
     registration: EnvironmentCreate,
+    request: Request,
     server: SyncServer = Depends(get_letta_server),
     headers: HeaderParams = Depends(get_headers),
 ):
     """Register a new remote environment and return its connection ID."""
     actor = await server.user_manager.get_actor_or_default_async(actor_id=headers.actor_id)
-    return await server.environment_manager.register_environment_async(registration=registration, actor=actor)
+    env = await server.environment_manager.register_environment_async(registration=registration, actor=actor)
+    
+    # Construct wsUrl from request URL
+    base_url = str(request.url).replace("http", "ws").split("/v1")[0]
+    env.ws_url = f"{base_url}/v1/environments/ws/{env.id}"
+    
+    return env
 
 @router.websocket("/ws/{connection_id}")
 async def websocket_endpoint(

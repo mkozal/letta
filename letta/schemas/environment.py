@@ -13,7 +13,7 @@ class Device(LettaBase):
     user_id: str = Field(..., description="User ID who registered the device", alias="userId")
 
 class Environment(LettaBase):
-    id: str = Field(..., description="Connection ID")
+    id: str = Field(..., description="Connection ID", alias="connectionId")
     device_id: str = Field(..., description="Device ID", alias="deviceId")
     connection_name: str = Field(..., description="Human-readable name for the environment", alias="connectionName")
     organization_id: str = Field(..., description="Organization ID", alias="organizationId")
@@ -21,6 +21,9 @@ class Environment(LettaBase):
     first_seen_at: int = Field(..., description="Timestamp of first appearance", alias="firstSeenAt")
     last_seen_at: int = Field(..., description="Timestamp of last activity", alias="lastSeenAt")
     metadata: DeviceMetadata = Field(..., description="Device metadata")
+    connected_at: Optional[int] = Field(None, description="Timestamp when the environment connected", alias="connectedAt")
+    last_heartbeat: Optional[int] = Field(None, description="Timestamp of last heartbeat", alias="lastHeartbeat")
+    ws_url: Optional[str] = Field(None, description="WebSocket URL for the environment", alias="wsUrl")
 
 class EnvironmentList(LettaBase):
     connections: List[Environment]
