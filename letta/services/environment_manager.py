@@ -20,11 +20,32 @@ class EnvironmentManager:
     async def register_environment_async(self, registration: EnvironmentCreate, actor: User) -> PydanticEnvironment:
         """Register a new remote environment."""
         async with db_registry.async_session() as session:
+            # Check for existing environment with same device_id and connection_name
+            stmt = select(EnvironmentModel).where(
+                EnvironmentModel.device_id == registration.device_id,
+                EnvironmentModel.connection_name == registration.connection_name,
+                EnvironmentModel.organization_id == actor.organization_id
+            ).order_by(EnvironmentModel.last_seen_at.desc())
+            
+            result = await session.execute(stmt)
+            existing_envs = result.scalars().all()
+            
+            if existing_envs:
+                # Reuse the most recent one
+                env = existing_envs[0]
+                env.last_seen_at = int(time.time() * 1000)
+                env.metadata_ = registration.metadata.model_dump()
+                
+                # Delete others (duplicates)
+                if len(existing_envs) > 1:
+                    for duplicate in existing_envs[1:]:
+                        await session.delete(duplicate)
+                
+                await env.update_async(session)
+                return env.to_pydantic()
+            
+            # Create new if none found
             connection_id = f"env-{uuid.uuid4()}"
-            
-            # Ensure device exists or create it? 
-            # For now, we'll just focus on the environment/connection
-            
             new_env = EnvironmentModel(
                 id=connection_id,
                 device_id=registration.device_id,
