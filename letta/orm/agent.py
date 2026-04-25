@@ -267,6 +267,7 @@ class Agent(SqlalchemyBase, OrganizationMixin, ProjectMixin, TemplateEntityMixin
             "max_files_open": self.max_files_open,
             "per_file_view_window_char_limit": self.per_file_view_window_char_limit,
             "hidden": self.hidden,
+            "environment_id": self.environment_id,
             # optional field defaults
             "tags": [],
             "tools": [],
@@ -398,6 +399,7 @@ class Agent(SqlalchemyBase, OrganizationMixin, ProjectMixin, TemplateEntityMixin
             "max_files_open": self.max_files_open,
             "per_file_view_window_char_limit": self.per_file_view_window_char_limit,
             "hidden": self.hidden,
+            "environment_id": self.environment_id,
         }
         optional_fields = {
             "tags": [],
