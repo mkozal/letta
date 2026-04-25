@@ -422,16 +422,15 @@ class CreateAgent(BaseModel, validate_assignment=True):  #
             )
         return value
 
-    @model_validator(mode="after")
-    def validate_sleeptime_for_agent_type(self) -> "CreateAgent":
-        """Validate that enable_sleeptime is True when agent_type is a specific value"""
-        AGENT_TYPES_REQUIRING_SLEEPTIME = {AgentType.voice_convo_agent}
-
-        if self.agent_type in AGENT_TYPES_REQUIRING_SLEEPTIME:
-            if not self.enable_sleeptime:
-                raise ValueError(f"Agent type {self.agent_type} requires enable_sleeptime to be True")
-
         return self
+
+    @field_validator("environment_id")
+    @classmethod
+    def validate_environment_id(cls, value: Optional[str]) -> Optional[str]:
+        """Convert literal string 'undefined' to None to handle buggy UI clients."""
+        if value == "undefined":
+            return None
+        return value
 
 
 class InternalTemplateAgentCreate(CreateAgent):
@@ -546,6 +545,14 @@ class UpdateAgent(BaseModel):
                 f"per_file_view_window_char_limit cannot exceed {MAX_PER_FILE_VIEW_WINDOW_CHAR_LIMIT}. Got: {value}",
                 argument_name="per_file_view_window_char_limit",
             )
+        return value
+
+    @field_validator("environment_id")
+    @classmethod
+    def validate_environment_id(cls, value: Optional[str]) -> Optional[str]:
+        """Convert literal string 'undefined' to None to handle buggy UI clients."""
+        if value == "undefined":
+            return None
         return value
 
 
