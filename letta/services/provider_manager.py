@@ -1043,7 +1043,32 @@ class ProviderManager:
                     except Exception as e:
                         logger.warning(f"Failed to fetch models from BYOK provider {provider_name}: {e}")
 
-            raise NoResultFound(f"LLM model not found with handle='{handle}'")
+            # Model not found in DB or BYOK, return a fallback config
+            # Parse handle (e.g. "zai/glm-4.7")
+            parts = handle.split("/")
+            if len(parts) == 2:
+                provider_name, model_name = parts
+            else:
+                provider_name = "openai" # default
+                model_name = handle
+                
+            # Try to guess endpoint type from provider name
+            # LLMConfig model_endpoint_type is a Literal, we should validate it
+            from typing import get_args
+            valid_endpoint_types = get_args(LLMConfig.model_fields["model_endpoint_type"].annotation)
+            
+            endpoint_type = provider_name if provider_name in valid_endpoint_types else "openai"
+            
+            logger.info(f"Generating fallback LLMConfig for handle '{handle}' (provider={provider_name}, model={model_name}, type={endpoint_type})")
+            
+            return LLMConfig(
+                model=model_name,
+                model_endpoint_type=endpoint_type,
+                context_window=128000, # safe default for modern models
+                handle=handle,
+                provider_name=provider_name,
+                provider_category=ProviderCategory.base,
+            )
 
         # Get the provider for this model and cast to subtype to access provider-specific methods
         provider = await self.get_provider_async(provider_id=model.provider_id, actor=actor)
