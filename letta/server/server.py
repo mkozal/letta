@@ -1502,6 +1502,35 @@ class SyncServer(object):
 
         return providers
 
+    def get_fallback_llm_config_from_handle(self, handle: str) -> LLMConfig:
+        """Generates a best-guess LLMConfig from a handle string when no provider is found."""
+        from letta.schemas.llm_config import LLMConfig
+        
+        # Parse handle (e.g. "zai/glm-4.7")
+        parts = handle.split("/")
+        if len(parts) == 2:
+            provider, model = parts
+        else:
+            provider = "openai" # default
+            model = handle
+            
+        # Try to guess endpoint type from provider name
+        # LLMConfig model_endpoint_type is a Literal, we should validate it
+        from typing import get_args
+        valid_endpoint_types = get_args(LLMConfig.model_fields["model_endpoint_type"].annotation)
+        
+        endpoint_type = provider if provider in valid_endpoint_types else "openai"
+        
+        logger.info(f"Generating fallback LLMConfig for handle '{handle}' (provider={provider}, model={model}, type={endpoint_type})")
+        
+        return LLMConfig(
+            model=model,
+            model_endpoint_type=endpoint_type,
+            context_window=128000, # safe default for modern models
+            handle=handle,
+            provider_name=provider,
+        )
+
     @trace_method
     async def get_llm_config_from_handle_async(
         self,
@@ -1523,7 +1552,12 @@ class SyncServer(object):
             from letta.orm.errors import NoResultFound
 
             if isinstance(e, NoResultFound):
-                raise HandleNotFoundError(handle, [])
+                # Try to generate a fallback config if the handle isn't found
+                try:
+                    return self.get_fallback_llm_config_from_handle(handle)
+                except Exception as fallback_err:
+                    logger.warning(f"Failed to generate fallback LLMConfig for handle '{handle}': {fallback_err}")
+                    raise HandleNotFoundError(handle, [])
             raise
 
         if context_window_limit is not None:
