@@ -802,7 +802,7 @@ class AgentManager:
                 if llm_provider_changed:
                     from letta.services.summarizer.summarizer_config import CompactionSettings, get_default_summarizer_model
             
-            if agent_update.environment_id is not None:
+            if "environment_id" in agent_update.model_fields_set:
                 agent.environment_id = agent_update.environment_id
 
             if llm_provider_changed:
