@@ -180,6 +180,13 @@ async def list_agents(
     Get a list of all agents.
     """
 
+    # SURGICAL HACK: Detect the agent selector's specific query from the frontend
+    # Pure query: ?limit=5&query_text=&project_id=
+    if limit == 5 and (not query_text) and (not project_id):
+        logger.info("Letta ADE Surgical Switcher: Detected pure selector query, expanding limit to 1000 and removing project filter")
+        limit = 1000
+        project_id = None
+
     # Retrieve the actor (user) details
     actor = await server.user_manager.get_actor_or_default_async(actor_id=headers.actor_id)
 
