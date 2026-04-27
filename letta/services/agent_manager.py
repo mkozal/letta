@@ -51,8 +51,9 @@ from letta.orm.sqlalchemy_base import AccessType
 from letta.otel.tracing import trace_method
 from letta.prompts.prompt_generator import PromptGenerator
 from letta.schemas.agent import (
+    AgentState as PydanticAgentState,
+    CreateAgent,
     InternalTemplateAgentCreate,
-    SlimAgentState,
     UpdateAgent,
 )
 from letta.schemas.block import DEFAULT_BLOCKS, Block as PydanticBlock, BlockUpdate
@@ -1050,8 +1051,7 @@ class AgentManager:
         show_hidden_agents: Optional[bool] = None,
         last_stop_reason: Optional[StopReasonType] = None,
         created_by_id: Optional[str] = None,
-        slim: bool = False,
-    ) -> List[Union[PydanticAgentState, SlimAgentState]]:
+    ) -> List[PydanticAgentState]:
         """
         Retrieves agents with optimized filtering and optional field selection.
 
@@ -1095,21 +1095,6 @@ class AgentManager:
 
             if limit:
                 query = query.limit(limit)
-            
-            if slim:
-                # Optimized slim query
-                result = await session.execute(query)
-                agents = result.scalars().all()
-                return [
-                    SlimAgentState(
-                        id=agent.id,
-                        name=agent.name,
-                        last_run_completion=agent.last_run_completion,
-                        project_id=agent.project_id,
-                        hidden=agent.hidden
-                    ) for agent in agents
-                ]
-
             result = await session.execute(query)
             agents = result.scalars().all()
 
