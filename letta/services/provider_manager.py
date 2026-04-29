@@ -580,8 +580,24 @@ class ProviderManager:
                     )
 
                     if existing_providers:
-                        logger.debug(f"Base provider '{provider.name}' already exists in database, skipping")
+                        existing = existing_providers[0]
+                        # Update base_url if it has changed in the environment
+                        if existing.base_url != provider.base_url:
+                            logger.info(f"Updating base_url for provider '{provider.name}' from environment: {existing.base_url} -> {provider.base_url}")
+                            # We need to update the ORM object
+                            async with db_registry.async_session() as update_session:
+                                from sqlalchemy import select
+                                from letta.orm.provider import Provider as ProviderORM
+
+                                stmt = select(ProviderORM).where(ProviderORM.id == existing.id)
+                                result = await update_session.execute(stmt)
+                                orm_provider = result.scalar_one()
+                                orm_provider.base_url = provider.base_url
+                                await update_session.commit()
+                        else:
+                            logger.debug(f"Base provider '{provider.name}' already exists in database with matching base_url, skipping")
                         continue
+
 
                     # Convert Provider to ProviderCreate
                     # NOTE: Do NOT store API keys for base providers in the database.
@@ -1053,13 +1069,14 @@ class ProviderManager:
                 provider_name = "openai" # default
                 model_name = handle
 
-            # If it's an openai-proxy handle, we know it's using the OpenAI provider with a custom endpoint
-            if provider_name == "openai-proxy":
+            # If it's an openai-proxy or openai handle, and we have a custom endpoint, use it
+            if provider_name in ["openai-proxy", "openai"]:
                 fallback_provider_name = "openai"
                 fallback_endpoint = model_settings.openai_api_base
             else:
                 fallback_provider_name = provider_name
                 fallback_endpoint = None
+
 
                 
             # Try to guess endpoint type from provider name
@@ -1095,8 +1112,13 @@ class ProviderManager:
         if hasattr(typed_provider, "openai_compat_base_url"):
             # For providers like ollama/vllm/lmstudio that need /v1 appended for OpenAI compatibility
             model_endpoint = typed_provider.openai_compat_base_url
+        elif provider.provider_type == ProviderType.openai and provider.provider_category == ProviderCategory.base:
+            # Safety override: ensure base OpenAI provider always uses the current server configuration
+            # This handles cases where the database record might be stale
+            model_endpoint = model_settings.openai_api_base
         elif typed_provider.base_url:
             model_endpoint = typed_provider.base_url
+
         elif provider.provider_type == ProviderType.chatgpt_oauth:
             # ChatGPT OAuth uses the ChatGPT backend API, not a generic endpoint pattern
             from letta.schemas.providers.chatgpt_oauth import CHATGPT_CODEX_ENDPOINT
@@ -1176,11 +1198,18 @@ class ProviderManager:
         # Get the provider for this model
         provider = await self.get_provider_async(provider_id=model.provider_id, actor=actor)
 
+        # Determine the embedding endpoint
+        if provider.provider_type == ProviderType.openai and provider.provider_category == ProviderCategory.base:
+            embedding_endpoint = model_settings.openai_api_base
+        else:
+            embedding_endpoint = provider.base_url or f"https://api.{provider.provider_type.value}.com/v1"
+
         # Construct the EmbeddingConfig from the model and provider data
         embedding_config = EmbeddingConfig(
             embedding_model=model.name,
             embedding_endpoint_type=model.model_endpoint_type,
-            embedding_endpoint=provider.base_url or f"https://api.{provider.provider_type.value}.com/v1",
+            embedding_endpoint=embedding_endpoint,
+
             embedding_dim=model.embedding_dim or 1536,  # Use model's dimension or default
             embedding_chunk_size=300,  # Default chunk size
             handle=model.handle,
