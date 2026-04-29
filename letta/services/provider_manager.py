@@ -1046,8 +1046,9 @@ class ProviderManager:
             # Model not found in DB or BYOK, return a fallback config
             # Parse handle (e.g. "zai/glm-4.7")
             parts = handle.split("/")
-            if len(parts) == 2:
-                provider_name, model_name = parts
+            if len(parts) >= 2:
+                provider_name = parts[0]
+                model_name = "/".join(parts[1:])
             else:
                 provider_name = "openai" # default
                 model_name = handle
