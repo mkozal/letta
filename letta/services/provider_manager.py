@@ -1052,24 +1052,35 @@ class ProviderManager:
             else:
                 provider_name = "openai" # default
                 model_name = handle
+
+            # If it's an openai-proxy handle, we know it's using the OpenAI provider with a custom endpoint
+            if provider_name == "openai-proxy":
+                fallback_provider_name = "openai"
+                fallback_endpoint = model_settings.openai_api_base
+            else:
+                fallback_provider_name = provider_name
+                fallback_endpoint = None
+
                 
             # Try to guess endpoint type from provider name
             # LLMConfig model_endpoint_type is a Literal, we should validate it
             from typing import get_args
             valid_endpoint_types = get_args(LLMConfig.model_fields["model_endpoint_type"].annotation)
             
-            endpoint_type = provider_name if provider_name in valid_endpoint_types else "openai"
+            endpoint_type = fallback_provider_name if fallback_provider_name in valid_endpoint_types else "openai"
             
-            logger.info(f"Generating fallback LLMConfig for handle '{handle}' (provider={provider_name}, model={model_name}, type={endpoint_type})")
+            logger.info(f"Generating fallback LLMConfig for handle '{handle}' (provider={fallback_provider_name}, model={model_name}, type={endpoint_type})")
             
             return LLMConfig(
                 model=model_name,
                 model_endpoint_type=endpoint_type,
+                model_endpoint=fallback_endpoint,
                 context_window=128000, # safe default for modern models
                 handle=handle,
-                provider_name=provider_name,
+                provider_name=fallback_provider_name,
                 provider_category=ProviderCategory.base,
             )
+
 
         # Get the provider for this model and cast to subtype to access provider-specific methods
         provider = await self.get_provider_async(provider_id=model.provider_id, actor=actor)

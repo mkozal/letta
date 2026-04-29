@@ -122,42 +122,86 @@ class OpenAIProvider(Provider):
         return await self._list_llm_models(data)
 
     async def list_embedding_models_async(self) -> list[EmbeddingConfig]:
-        """Return known OpenAI embedding models.
+        """Return OpenAI embedding models.
 
-        Note: we intentionally do not attempt to fetch embedding models from the remote endpoint here.
-        The OpenAI "models" list does not reliably expose embedding metadata needed for filtering,
-        and in tests we frequently point OPENAI_BASE_URL at a local mock server.
+        If using the official OpenAI endpoint, return a hardcoded list of known models.
+        If using a proxy, attempt to fetch models from the remote endpoint and filter for embedding models.
         """
 
-        return [
-            EmbeddingConfig(
-                embedding_model="text-embedding-ada-002",
-                embedding_endpoint_type="openai",
-                embedding_endpoint=self.base_url,
-                embedding_dim=1536,
-                embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
-                handle=self.get_handle("text-embedding-ada-002", is_embedding=True),
-                batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
-            ),
-            EmbeddingConfig(
-                embedding_model="text-embedding-3-small",
-                embedding_endpoint_type="openai",
-                embedding_endpoint=self.base_url,
-                embedding_dim=1536,
-                embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
-                handle=self.get_handle("text-embedding-3-small", is_embedding=True),
-                batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
-            ),
-            EmbeddingConfig(
-                embedding_model="text-embedding-3-large",
-                embedding_endpoint_type="openai",
-                embedding_endpoint=self.base_url,
-                embedding_dim=3072,
-                embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
-                handle=self.get_handle("text-embedding-3-large", is_embedding=True),
-                batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
-            ),
-        ]
+        if self.base_url == "https://api.openai.com/v1":
+            return [
+                EmbeddingConfig(
+                    embedding_model="text-embedding-ada-002",
+                    embedding_endpoint_type="openai",
+                    embedding_endpoint=self.base_url,
+                    embedding_dim=1536,
+                    embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
+                    handle=self.get_handle("text-embedding-ada-002", is_embedding=True),
+                    batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
+                ),
+                EmbeddingConfig(
+                    embedding_model="text-embedding-3-small",
+                    embedding_endpoint_type="openai",
+                    embedding_endpoint=self.base_url,
+                    embedding_dim=1536,
+                    embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
+                    handle=self.get_handle("text-embedding-3-small", is_embedding=True),
+                    batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
+                ),
+                EmbeddingConfig(
+                    embedding_model="text-embedding-3-large",
+                    embedding_endpoint_type="openai",
+                    embedding_endpoint=self.base_url,
+                    embedding_dim=3072,
+                    embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
+                    handle=self.get_handle("text-embedding-3-large", is_embedding=True),
+                    batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
+                ),
+            ]
+
+        # Proxy behavior: fetch all models and filter for embedding models
+        logger.info(f"Fetching embedding models from proxy: {self.base_url}")
+        try:
+            data = await self._get_models_async()
+            configs = []
+            for model in data:
+                model_name = model.get("id")
+                if not model_name:
+                    continue
+
+                # Heuristic: include if "embed" is in the name, or if "embedding" is in the name
+                # Many proxies (Ollama, vLLM) include embedding models in /models
+                if "embed" in model_name.lower() or "bge" in model_name.lower():
+
+                    # Attempt to guess dimension
+                    dim = 1536
+                    if "large" in model_name.lower() and "3" in model_name:
+                        dim = 3072
+                    elif "small" in model_name.lower() and "3" in model_name:
+                        dim = 1536
+                    elif "minilm" in model_name.lower():
+                        dim = 384
+                    elif "bge" in model_name.lower() and "large" in model_name.lower():
+                        dim = 1024
+                    elif "bge" in model_name.lower() and "base" in model_name.lower():
+                        dim = 768
+
+                    configs.append(
+                        EmbeddingConfig(
+                            embedding_model=model_name,
+                            embedding_endpoint_type="openai",
+                            embedding_endpoint=self.base_url,
+                            embedding_dim=dim,
+                            embedding_chunk_size=DEFAULT_EMBEDDING_CHUNK_SIZE,
+                            handle=self.get_handle(model_name, is_embedding=True, base_name="openai-proxy"),
+                            batch_size=DEFAULT_EMBEDDING_BATCH_SIZE,
+                        )
+                    )
+            return configs
+        except Exception as e:
+            logger.warning(f"Failed to fetch embedding models from proxy {self.base_url}: {e}")
+            return []
+
 
     async def _list_llm_models(self, data: list[dict]) -> list[LLMConfig]:
         """
@@ -209,7 +253,12 @@ class OpenAIProvider(Provider):
             if self.base_url.endswith("api.baseten.co/environments/production/sync/v1"):
                 handle = self.get_handle(model_name, base_name="baseten")
             elif self.base_url != "https://api.openai.com/v1":
+                # If using a proxy, filter out models that look like embedding models
+                if "embed" in model_name.lower() or "bge" in model_name.lower():
+                    continue
                 handle = self.get_handle(model_name, base_name="openai-proxy")
+
+
             else:
                 handle = self.get_handle(model_name)
 

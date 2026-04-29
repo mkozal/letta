@@ -149,6 +149,12 @@ class ModelSettings(BaseSettings):
         validation_alias=AliasChoices("OPENAI_BASE_URL", "OPENAI_API_BASE"),  # pydantic-settings v1
     )
 
+    @property
+    def openai_official(self) -> bool:
+        """Check if the OpenAI API base is the official one."""
+        return self.openai_api_base == "https://api.openai.com/v1"
+
+
     # openrouter
     openrouter_api_key: Optional[str] = None
     # Optional additional headers recommended by OpenRouter
